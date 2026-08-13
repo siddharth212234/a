@@ -29,8 +29,7 @@
             'X-Requested-With': 'XMLHttpRequest' // Sometimes required by backend
         },
         body: JSON.stringify({ 
-            email: '
-harshit.j+regular1@cywarden.com' // Change this to your email
+            email: 'harshit.j+regular1@cywarden.com' // Change this to your email
         })
     })
     .then(response => {
